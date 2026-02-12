@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>量子五目並べ</title>
+  <style>
+    :root {
+      --cell-size: 58px;
+      --board-bg: #d5a55b;
+      --line: #5e3b17;
+      --panel: #1f2937;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #dbeafe 100%);
+      color: #111827;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .app {
+      max-width: 1020px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 620px) minmax(280px, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .board-wrap {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+    }
+
+    .board {
+      width: calc(var(--cell-size) * 10);
+      height: calc(var(--cell-size) * 10);
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      background: var(--board-bg);
+      border: 2px solid var(--line);
+      margin: 0 auto;
+    }
+
+    .cell {
+      border: 1px solid color-mix(in srgb, var(--line) 70%, white);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      padding: 2px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .cell.disabled {
+      cursor: not-allowed;
+    }
+
+    .stone {
+      width: 92%;
+      height: 92%;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: 700;
+      font-size: 13px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    }
+
+    .stone.quantum {
+      color: #f9fafb;
+      border: 2px solid rgba(17, 24, 39, 0.5);
+      box-shadow: inset 0 2px 5px rgba(255, 255, 255, 0.3);
+    }
+
+    .stone.black {
+      background: radial-gradient(circle at 30% 30%, #4b5563, #0b0b0b 70%);
+      color: transparent;
+      position: relative;
+    }
+
+    .stone.black::after {
+      content: "●";
+      color: #0b0b0b;
+      filter: drop-shadow(0 0 1px #fff);
+      font-size: 38px;
+      line-height: 1;
+      text-shadow: none;
+    }
+
+    .stone.white {
+      background: radial-gradient(circle at 30% 30%, #ffffff, #d1d5db 85%);
+      color: transparent;
+      border: 2px solid #9ca3af;
+      position: relative;
+    }
+
+    .stone.white::after {
+      content: "○";
+      color: #111827;
+      font-size: 38px;
+      line-height: 1;
+      text-shadow: none;
+    }
+
+    .panel {
+      background: var(--panel);
+      color: #e5e7eb;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
+    }
+
+    .panel h1 {
+      margin: 0 0 10px;
+      font-size: 24px;
+    }
+
+    .status {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 15px;
+    }
+
+    .status strong { color: #93c5fd; }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    button:disabled { cursor: not-allowed; opacity: 0.5; }
+
+    #observeBtn { background: #f59e0b; color: #111827; }
+    #resumeBtn { background: #22c55e; color: #052e16; }
+    #resetBtn { background: #60a5fa; color: #0f172a; }
+
+    .log {
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      height: 260px;
+      overflow: auto;
+      padding: 8px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .log-line { margin-bottom: 6px; border-bottom: 1px dashed #374151; padding-bottom: 6px; }
+
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; }
+      .board { width: min(92vw, calc(var(--cell-size) * 10)); height: min(92vw, calc(var(--cell-size) * 10)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="board-wrap">
+      <div id="board" class="board" aria-label="量子五目並べ盤面"></div>
+    </section>
+
+    <aside class="panel">
+      <h1>量子五目並べ</h1>
+      <div class="status">
+        <div>手番: <strong id="turnLabel"></strong></div>
+        <div>観測残り回数: <strong id="observeLabel"></strong></div>
+        <div>勝者: <strong id="winnerLabel">未決着</strong></div>
+      </div>
+
+      <div class="buttons">
+        <button id="observeBtn">観測する</button>
+        <button id="resumeBtn">再開（確率表示に戻す）</button>
+        <button id="resetBtn">リセット</button>
+      </div>
+
+      <div id="log" class="log" aria-live="polite"></div>
+    </aside>
+  </div>
+
+  <script>
+    const SIZE = 10;
+    const MAX_OBSERVE = 5;
+    const PLAYER_CONFIG = {
+      A: { blackProbSequence: [90, 70], label: "プレイヤーA" },
+      B: { blackProbSequence: [10, 30], label: "プレイヤーB" }
+    };
+
+    const boardEl = document.getElementById("board");
+    const turnLabel = document.getElementById("turnLabel");
+    const observeLabel = document.getElementById("observeLabel");
+    const winnerLabel = document.getElementById("winnerLabel");
+    const logEl = document.getElementById("log");
+    const observeBtn = document.getElementById("observeBtn");
+    const resumeBtn = document.getElementById("resumeBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    let state;
+
+    function createInitialState() {
+      return {
+        board: Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => null)),
+        turn: "A",
+        stoneCount: { A: 0, B: 0 },
+        observeLeft: { A: MAX_OBSERVE, B: MAX_OBSERVE },
+        winner: null,
+        phase: "quantum",
+        backupBeforeObserve: null,
+        lastObserver: null,
+        log: ["ゲームを開始しました。盤面をクリックして量子石を置いてください。"]
+      };
+    }
+
+    function cloneBoard(board) {
+      return board.map(row => row.map(cell => (cell ? { ...cell } : null)));
+    }
+
+    function switchTurn(player) {
+      return player === "A" ? "B" : "A";
+    }
+
+    function getCurrentBlackProb(player) {
+      const sequence = PLAYER_CONFIG[player].blackProbSequence;
+      const index = state.stoneCount[player] % sequence.length;
+      return sequence[index];
+    }
+
+    function pushLog(text) {
+      state.log.push(text);
+      const line = document.createElement("div");
+      line.className = "log-line";
+      line.textContent = text;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function rerenderLog() {
+      logEl.innerHTML = "";
+      state.log.forEach(msg => {
+        const line = document.createElement("div");
+        line.className = "log-line";
+        line.textContent = msg;
+        logEl.appendChild(line);
+      });
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function getCellView(cell) {
+      if (!cell) return null;
+      if (state.phase === "quantum" || !cell.resolvedColor) {
+        return {
+          type: "quantum",
+          label: `${cell.blackProb}%`,
+          style: `linear-gradient(90deg, #111 0 ${cell.blackProb}%, #f3f4f6 ${cell.blackProb}% 100%)`
+        };
+      }
+      return { type: cell.resolvedColor === "B" ? "black" : "white" };
+    }
+
+    function renderBoard() {
+      boardEl.innerHTML = "";
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          const cellEl = document.createElement("button");
+          cellEl.className = "cell";
+          cellEl.type = "button";
+          cellEl.disabled = Boolean(state.winner) || state.phase !== "quantum" || Boolean(state.board[r][c]);
+          if (cellEl.disabled) cellEl.classList.add("disabled");
+          cellEl.addEventListener("click", () => placeStone(r, c));
+
+          const view = getCellView(state.board[r][c]);
+          if (view) {
+            const stone = document.createElement("div");
+            stone.className = `stone ${view.type}`;
+            if (view.type === "quantum") {
+              stone.textContent = view.label;
+              stone.style.background = view.style;
+            }
+            cellEl.appendChild(stone);
+          }
+          boardEl.appendChild(cellEl);
+        }
+      }
+    }
+
+    function renderStatus() {
+      turnLabel.textContent = state.winner
+        ? "ゲーム終了"
+        : `${PLAYER_CONFIG[state.turn].label}（次の黒確率 ${getCurrentBlackProb(state.turn)}%）`;
+      observeLabel.textContent = `A: ${state.observeLeft.A}回 / B: ${state.observeLeft.B}回`;
+      winnerLabel.textContent = state.winner || "未決着";
+
+      observeBtn.disabled = Boolean(state.winner) || state.phase !== "quantum" || state.observeLeft[state.turn] <= 0 || !hasUnresolvedStone();
+      resumeBtn.disabled = Boolean(state.winner) || state.phase !== "observed" || !state.backupBeforeObserve;
+    }
+
+    function hasUnresolvedStone() {
+      return state.board.some(row => row.some(cell => cell && !cell.resolvedColor));
+    }
+
+    function placeStone(r, c) {
+      if (state.winner || state.phase !== "quantum" || state.board[r][c]) return;
+      const blackProb = getCurrentBlackProb(state.turn);
+      state.board[r][c] = {
+        owner: state.turn,
+        blackProb,
+        resolvedColor: null
+      };
+      state.stoneCount[state.turn] += 1;
+      pushLog(`${PLAYER_CONFIG[state.turn].label} が (${r + 1}, ${c + 1}) に量子石を配置（黒${blackProb}%）。`);
+      state.turn = switchTurn(state.turn);
+      render();
+    }
+
+    function observeBoard() {
+      if (state.winner || state.phase !== "quantum") return;
+      if (state.observeLeft[state.turn] <= 0) {
+        pushLog(`${PLAYER_CONFIG[state.turn].label} の観測回数がありません。`);
+        return;
+      }
+      if (!hasUnresolvedStone()) {
+        pushLog("観測対象の未観測石がありません。");
+        return;
+      }
+
+      const observer = state.turn;
+      state.backupBeforeObserve = {
+        board: cloneBoard(state.board),
+        turn: state.turn,
+        observeLeft: { ...state.observeLeft },
+        lastObserver: state.lastObserver
+      };
+
+      state.board.forEach(row => {
+        row.forEach(cell => {
+          if (cell && !cell.resolvedColor) {
+            const roll = Math.random() * 100;
+            cell.resolvedColor = roll < cell.blackProb ? "B" : "W";
+          }
+        });
+      });
+
+      state.observeLeft[observer] -= 1;
+      state.phase = "observed";
+      state.lastObserver = observer;
+
+      const { blackWin, whiteWin } = evaluateWins();
+      if (blackWin && whiteWin) {
+        state.winner = `${PLAYER_CONFIG[observer].label}の勝ち（同時5連タイブレーク）`;
+      } else if (blackWin) {
+        state.winner = "黒の勝ち";
+      } else if (whiteWin) {
+        state.winner = "白の勝ち";
+      } else if (state.observeLeft.A === 0 && state.observeLeft.B === 0) {
+        state.winner = "引き分け";
+      }
+
+      pushLog(`${PLAYER_CONFIG[observer].label} が観測。盤上の量子石を確定しました。`);
+      if (state.winner) pushLog(`結果: ${state.winner}`);
+      render();
+    }
+
+    function resumeQuantum() {
+      if (state.winner || state.phase !== "observed" || !state.backupBeforeObserve) return;
+      const backup = state.backupBeforeObserve;
+      state.board = cloneBoard(backup.board);
+      state.turn = backup.turn;
+      state.observeLeft = { ...backup.observeLeft };
+      state.lastObserver = backup.lastObserver;
+      state.phase = "quantum";
+      state.backupBeforeObserve = null;
+      pushLog("再開: 観測前の確率表示状態に戻しました。観測回数も復元されます。");
+      render();
+    }
+
+    function evaluateWins() {
+      const hasFive = color => {
+        const directions = [
+          [0, 1],
+          [1, 0],
+          [1, 1],
+          [1, -1]
+        ];
+
+        for (let r = 0; r < SIZE; r++) {
+          for (let c = 0; c < SIZE; c++) {
+            const cell = state.board[r][c];
+            if (!cell || cell.resolvedColor !== color) continue;
+            for (const [dr, dc] of directions) {
+              let count = 1;
+              while (count < 5) {
+                const nr = r + dr * count;
+                const nc = c + dc * count;
+                if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) break;
+                const next = state.board[nr][nc];
+                if (!next || next.resolvedColor !== color) break;
+                count += 1;
+              }
+              if (count >= 5) return true;
+            }
+          }
+        }
+        return false;
+      };
+
+      return { blackWin: hasFive("B"), whiteWin: hasFive("W") };
+    }
+
+    function resetGame() {
+      state = createInitialState();
+      render();
+    }
+
+    function render() {
+      renderBoard();
+      renderStatus();
+      rerenderLog();
+    }
+
+    observeBtn.addEventListener("click", observeBoard);
+    resumeBtn.addEventListener("click", resumeQuantum);
+    resetBtn.addEventListener("click", resetGame);
+
+    resetGame();
+  </script>
+</body>
+</html>
